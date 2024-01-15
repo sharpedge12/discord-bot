@@ -2,5 +2,4 @@ discord
 python-dotenv
 hikari-lightbulb
 requests
-concurrent.futures
 flask
