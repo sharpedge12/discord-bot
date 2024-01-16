@@ -5,7 +5,6 @@ import math
 from datetime import datetime, timedelta
 import random 
 import requests
-import concurrent.futures
 from keep_alive import keep_alive 
 
 # with open("./token.env") as f: 
