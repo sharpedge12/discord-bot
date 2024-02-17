@@ -6,8 +6,21 @@ from datetime import datetime, timedelta
 from extra import prob_value
 import time
 from threading import Thread
+import pymongo
+from pymongo import MongoClient
+import json
+from keep_alive import keep_alive
 
 
+# for hosting purposes
+keep_alive()
+
+
+# getting tokens from environment variables
+_token = os.environ.get('token')
+_dbtoken = os.environ.get('dbtoken')
+
+# initialising the bot and database
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -15,8 +28,12 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 bot.leaderboard_result_week = ""
 bot.leaderboard_result_month = ""
 
+cluster = MongoClient(_dbtoken)
+db = cluster["bot"]
+collection = db["handless"]
 
 
+# making a new thread that gets called after 30 mins
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
@@ -54,17 +71,20 @@ def get_cf_ac_submissions(handle, time_period):
     except requests.RequestException as error:
         print(f"Error fetching Codeforces submissions for {handle}: {error}")
         return None
- 
+    except KeyError as error:
+        print(f"KeyError occurred for {handle}: {error}")
+        return None
+    except Exception as error:
+        print(f"An unexpected error occurred for {handle}: {error}")
+        return None
  
 
-def read_handles_from_file(file_path="handles.txt"):
-    try:
-        with open(file_path, "r") as file:
-            handles = file.read().splitlines()
-        return handles
-    except Exception as e:
-        print(f"Error reading handles from file: {e}")
-        return []
+# see all the handles in db and load them 
+def read_handles_from_file():
+    handles = []
+    for document in collection.find({}, {"_id": 0, "name": 1}):
+        handles.append(document["name"])
+    return handles 
     
 
 
@@ -103,16 +123,12 @@ def format_results(results_map, time):
     else: return f"```Monthly leaderboard\n{formatted_output}```"
 
 
-#inserting handle into handles.txt
-async def insert_handle(new_handle, file_path="handles.txt"):
-    try:
-        with open(file_path, "a") as file:
-            file.write(f"{new_handle}\n")
-        print(f"Handle '{new_handle}' has been inserted into the file.")
-    except Exception as e:
-        print(f"Error inserting handle: {e}")
+# insert handles into db 
+def insert_handle(new_handle):
+    new_entry = {"name": new_handle}
+    result = collection.insert_one(new_entry)
         
-        
+# verifying the handle before inserting
 def is_valid(handle):
     response = requests.get(f"https://codeforces.com/api/user.info?handles={handle}")
     return response.json()["status"] == "OK" 
@@ -128,9 +144,10 @@ def calculate_scores():
 def task():
     while True:
         calculate_scores()
+        print("the calculations were done")
         time.sleep(1800)
 
-
+# displays the leaderboard when calculated
 @bot.tree.command()
 async def leaderboard(inter: discord.Interaction, time: str):
     """
@@ -146,6 +163,7 @@ async def leaderboard(inter: discord.Interaction, time: str):
     await inter.response.send_message(final_output)
 
 
+# inserts the handle in database
 @bot.tree.command()
 async def sethandle(inter: discord.Interaction, handle: str): 
     """
@@ -155,12 +173,17 @@ async def sethandle(inter: discord.Interaction, handle: str):
         handle (str): cf handle
     """
     if is_valid(handle): 
-        await insert_handle(handle) 
-        await inter.response.send_message(handle + " is registered !") 
-        thread = Thread(target=calculate_scores)
-        thread.start()
+        result = collection.find_one({"name": handle})
+        if result:
+            await inter.response.send_message("the handle is already present in the database") 
+
+        else:
+            insert_handle(handle) 
+            await inter.response.send_message(handle + " is registered !") 
+            thread = Thread(target=calculate_scores)
+            thread.start()
     else: 
         await inter.response.send_message("Invalid handle.", ephemeral=True)
 
 
-bot.run(os.environ["BOT_TOKEN"])
+bot.run(_token)

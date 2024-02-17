@@ -1,5 +1,5 @@
 discord
 python-dotenv
-hikari-lightbulb
 requests
 flask
+pymongo
