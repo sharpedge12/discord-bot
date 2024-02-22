@@ -172,7 +172,7 @@ def task():
 async def lbAuto():
         while True:
             await asyncio.sleep(35*60)
-            channel = bot.get_channel(1210084296417878027)
+            channel = bot.get_channel(1210084194286567434)
             await channel.purge(limit=None)
             await channel.send(bot.leaderboard_result_week)
             await channel.send(bot.leaderboard_result_month)
@@ -203,20 +203,38 @@ async def sethandle(inter: discord.Interaction, handle: str):
         handle (str): cf handle
     """
 
-    if is_valid(handle): 
-        result = collection.find_one({"name": handle})
-        if result:
-            await inter.response.send_message("the handle is already present in the database") 
-        else:
-            if best_org(handle):
+    handle = handle.lower()
+
+    if inter.user.guild_permissions.manage_guild:
+
+        if is_valid(handle): 
+            result = collection.find_one({"name": handle})
+            if result:
+                await inter.response.send_message("the handle is already present in the database") 
+            else:
                 insert_handle(handle) 
                 await inter.response.send_message(handle + " is registered !") 
                 thread = Thread(target=calculate_scores)
                 thread.start()
+        else: 
+            await inter.response.send_message("Invalid handle.")
+
+    else:
+
+        if is_valid(handle): 
+            result = collection.find_one({"name": handle})
+            if result:
+                await inter.response.send_message("the handle is already present in the database") 
             else:
-                await inter.response.send_message("Please change your organisation in CF to 'Hajmola fan club' and try again") 
-    else: 
-        await inter.response.send_message("Invalid handle.")
+                if best_org(handle):
+                    insert_handle(handle) 
+                    await inter.response.send_message(handle + " is registered !") 
+                    thread = Thread(target=calculate_scores)
+                    thread.start()
+                else:
+                    await inter.response.send_message("Please change your organisation in CF to 'Hajmola fan club' and try again") 
+        else: 
+            await inter.response.send_message("Invalid handle.")
 
 
 bot.run(_token)
