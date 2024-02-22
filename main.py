@@ -10,23 +10,32 @@ import pymongo
 from pymongo import MongoClient
 import json
 from keep_alive import keep_alive
+import asyncio
 
 
 # for hosting purposes
 keep_alive()
 
 
-# getting tokens from environment variables
+# # getting tokens from environment variables
 _token = os.environ.get('token')
 _dbtoken = os.environ.get('dbtoken')
+
+# for testing and dev 
+# with open("./token.env") as f: 
+#         _token = f.read() 
+
+# with open("./db.env") as f: 
+#         _dbtoken = f.read() 
 
 # initialising the bot and database
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-bot.leaderboard_result_week = ""
-bot.leaderboard_result_month = ""
+bot.leaderboard_result_week = "Results not yet calculated, try again after a while."
+bot.leaderboard_result_month = "Results not yet calculated, try again after a while."
+
 
 cluster = MongoClient(_dbtoken)
 db = cluster["bot"]
@@ -40,6 +49,9 @@ async def on_ready():
     await bot.tree.sync()
     thread = Thread(target=task)
     thread.start()
+    
+    asyncio.create_task(lbAuto())
+
     
 
 
@@ -133,6 +145,16 @@ def is_valid(handle):
     response = requests.get(f"https://codeforces.com/api/user.info?handles={handle}")
     return response.json()["status"] == "OK" 
 
+# check if organization is as described
+def best_org(handle):
+    try:
+        response = requests.get(f"https://codeforces.com/api/user.info?handles={handle}")
+        flag = response.json()["organization"] == "Hajmola fan club"
+    except Exception as error:
+        flag = False
+    return flag
+        
+
 #calculates leaderboard results
 def calculate_scores():
     results_map_week = get_average_rating_for_handles(1)
@@ -147,7 +169,15 @@ def task():
         print("the calculations were done")
         time.sleep(1800)
 
-# displays the leaderboard when calculated
+async def lbAuto():
+        while True:
+            await asyncio.sleep(35*60)
+            channel = bot.get_channel(1210084296417878027)
+            await channel.purge(limit=None)
+            await channel.send(bot.leaderboard_result_week)
+            await channel.send(bot.leaderboard_result_month)
+
+# displays the leaderboard when caculated
 @bot.tree.command()
 async def leaderboard(inter: discord.Interaction, time: str):
     """
@@ -172,18 +202,21 @@ async def sethandle(inter: discord.Interaction, handle: str):
     Args:
         handle (str): cf handle
     """
+
     if is_valid(handle): 
         result = collection.find_one({"name": handle})
         if result:
             await inter.response.send_message("the handle is already present in the database") 
-
         else:
-            insert_handle(handle) 
-            await inter.response.send_message(handle + " is registered !") 
-            thread = Thread(target=calculate_scores)
-            thread.start()
+            if best_org(handle):
+                insert_handle(handle) 
+                await inter.response.send_message(handle + " is registered !") 
+                thread = Thread(target=calculate_scores)
+                thread.start()
+            else:
+                await inter.response.send_message("Please change your organisation in CF to 'Hajmola fan club' and try again") 
     else: 
-        await inter.response.send_message("Invalid handle.", ephemeral=True)
+        await inter.response.send_message("Invalid handle.")
 
 
 bot.run(_token)
