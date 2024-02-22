@@ -149,8 +149,9 @@ def is_valid(handle):
 def best_org(handle):
     try:
         response = requests.get(f"https://codeforces.com/api/user.info?handles={handle}")
-        flag = response.json()["organization"] == "Hajmola fan club"
+        flag = response.json()['result'][0]['organization'] == "Hajmola fan club"
     except Exception as error:
+        print(f"An unexpected error occurred in best_org for {handle}: {error}")
         flag = False
     return flag
         
@@ -202,39 +203,43 @@ async def sethandle(inter: discord.Interaction, handle: str):
     Args:
         handle (str): cf handle
     """
+    try:
+        handle = handle.lower()
 
-    handle = handle.lower()
+        if inter.user.guild_permissions.manage_guild:
 
-    if inter.user.guild_permissions.manage_guild:
-
-        if is_valid(handle): 
-            result = collection.find_one({"name": handle})
-            if result:
-                await inter.response.send_message("the handle is already present in the database") 
-            else:
-                insert_handle(handle) 
-                await inter.response.send_message(handle + " is registered !") 
-                thread = Thread(target=calculate_scores)
-                thread.start()
-        else: 
-            await inter.response.send_message("Invalid handle.")
-
-    else:
-
-        if is_valid(handle): 
-            result = collection.find_one({"name": handle})
-            if result:
-                await inter.response.send_message("the handle is already present in the database") 
-            else:
-                if best_org(handle):
+            if is_valid(handle): 
+                result = collection.find_one({"name": handle})
+                if result:
+                    await inter.response.send_message("the handle is already present in the database") 
+                else:
                     insert_handle(handle) 
                     await inter.response.send_message(handle + " is registered !") 
                     thread = Thread(target=calculate_scores)
                     thread.start()
-                else:
-                    await inter.response.send_message("Please change your organisation in CF to 'Hajmola fan club' and try again") 
-        else: 
-            await inter.response.send_message("Invalid handle.")
+            else: 
+                await inter.response.send_message("Invalid handle.")
 
+        else:
+
+            if is_valid(handle): 
+                result = collection.find_one({"name": handle})
+                if result:
+                    await inter.response.send_message("the handle is already present in the database") 
+                else:
+                    if best_org(handle):
+                        await inter.response.send_message(handle + " is registered !")
+                        insert_handle(handle) 
+                        thread = Thread(target=calculate_scores)
+                        thread.start()
+                    else:
+                        await inter.response.send_message("Please change your organisation in CF to 'Hajmola fan club' and try again") 
+            else: 
+                await inter.response.send_message("Invalid handle.")
+
+    except Exception as error:
+        print(f"An unexpected error occurred for {handle}: {error}")
+        return None
+    
 
 bot.run(_token)
